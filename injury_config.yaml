@@ -1,0 +1,88 @@
+# Injury Segmentation Configuration
+# Single-stage training with manual annotations
+#
+# Optimized from 43-experiment hyperparameter search:
+# - Learning Rate: 0.00001 (1e-5)
+# - Loss Weights: DICE=12.0, MASK=12.0, CLASS=2.0
+# - Image Size: 1280, Warmup: 250 iters
+# - Uses Swin-Large myotube pretrained weights as foundation
+#
+# Usage:
+#   python train_injury.py --dataset injury_dataset
+#   python train_injury.py --dataset injury_dataset --config injury_config.yaml
+
+_BASE_: configs/coco/instance-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_100ep.yaml
+
+# Model configuration
+MODEL:
+  # Use myotube pretrained weights for initialization (transfer learning)
+  WEIGHTS: "output_stage2_manual/model_final.pth"
+
+  SEM_SEG_HEAD:
+    # Single class: injury
+    NUM_CLASSES: 1
+
+  # Optimized from injury hyperparameter search
+  MASK_FORMER:
+    DEEP_SUPERVISION: True
+    CLASS_WEIGHT: 2.0    # Classification loss weight
+    MASK_WEIGHT: 12.0    # Mask loss weight
+    DICE_WEIGHT: 12.0    # Dice loss for irregular injury shapes
+
+    TEST:
+      OBJECT_MASK_THRESHOLD: 0.3  # Adjust based on injury characteristics
+
+# Dataset configuration
+DATASETS:
+  TRAIN: ("injury_train",)
+  TEST: ("injury_val_cropped",)
+
+# Solver configuration
+SOLVER:
+  IMS_PER_BATCH: 1  # Swin-Large requires single batch
+  BASE_LR: 0.00001  # Optimized learning rate (1e-5)
+  MAX_ITER: 7000    # Model peaks ~5000-6800 iters, overfits after
+  WARMUP_FACTOR: 0.1
+  WARMUP_ITERS: 250
+  WEIGHT_DECAY: 0.01
+  OPTIMIZER: "ADAMW"
+  LR_SCHEDULER_NAME: "WarmupCosineLR"
+  BACKBONE_MULTIPLIER: 0.1  # Conservative backbone learning
+  CHECKPOINT_PERIOD: 1000
+  CLIP_GRADIENTS:
+    ENABLED: True
+    CLIP_TYPE: "full_model"
+    CLIP_VALUE: 0.01
+    NORM_TYPE: 2.0
+  AMP:
+    ENABLED: True
+
+# Input configuration
+INPUT:
+  IMAGE_SIZE: 1280  # Optimized from search (better augmentation diversity)
+  MIN_SCALE: 0.7
+  MAX_SCALE: 1.4
+  FORMAT: "RGB"
+  DATASET_MAPPER_NAME: "coco_instance_lsj"
+
+  CROP:
+    ENABLED: True
+    TYPE: "relative_range"
+    SIZE: [0.2, 0.3]
+
+  COLOR_AUG_SSD: True
+  RANDOM_FLIP: "horizontal"
+
+# Evaluation configuration
+TEST:
+  EVAL_PERIOD: 500
+
+# Data loader configuration
+DATALOADER:
+  FILTER_EMPTY_ANNOTATIONS: True
+  NUM_WORKERS: 4
+
+# Output directory
+OUTPUT_DIR: "./output_injury"
+
+VERSION: 2

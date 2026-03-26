@@ -758,7 +758,11 @@ class MyotubeFijiIntegration(SegmentationInterface):
         print(f"   🔍 {overlay_type.title()} overlay: {num_instances} instances visualized")
 
         # Memory cleanup after overlay generation
-        del torch_instances, final_masks, vis_image
+        del torch_instances, vis_image
+        try:
+            del final_masks
+        except NameError:
+            pass
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         import gc

@@ -5,6 +5,7 @@ Shared constants and default configurations for myotube segmentation.
 __all__ = [
     'DEFAULT_POST_PROCESSING_CONFIG',
     'DEFAULT_GUI_CONFIG',
+    'DEFAULT_INJURY_GUI_CONFIG',
     'IMAGE_EXTENSIONS',
     'STATUS_SUCCESS',
     'STATUS_ERROR',
@@ -43,6 +44,22 @@ DEFAULT_GUI_CONFIG = {
     'grid_size': 2,
     'tile_overlap': 0.20,
     'skip_merged_masks': True,
+    'save_measurements': False,
+}
+
+
+# Default GUI configuration for injury segmentation
+DEFAULT_INJURY_GUI_CONFIG = {
+    'input_path': '',
+    'output_dir': '',
+    'config': '',
+    'weights': '',
+    'mask2former_path': '',
+    'confidence': 0.05,
+    'min_area': 30,
+    'max_area': 50000,
+    'final_min_area': 50,
+    'cpu': False,
     'save_measurements': False,
 }
 

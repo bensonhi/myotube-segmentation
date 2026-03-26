@@ -11,7 +11,7 @@ This guide will help you install and run the myotube segmentation, nuclei segmen
 2. [Step 1: Install Fiji](#step-1-install-fiji)
 3. [Step 2: Install Miniconda](#step-2-install-miniconda)
 4. [Step 3: Download This Project](#step-3-download-this-project)
-5. [Step 4: Download Trained Model](#step-4-download-trained-model)
+5. [Step 4: Download Trained Models](#step-4-download-trained-models)
 6. [Step 5: Copy Files to Fiji](#step-5-copy-files-to-fiji)
 7. [Step 6: First-Time Setup](#step-6-first-time-setup)
 8. [Step 7: Using the Multi-Tab Interface](#step-7-using-the-multi-tab-interface)
@@ -156,11 +156,11 @@ Miniconda is a Python distribution manager needed to run the segmentation algori
 
 ---
 
-## Step 4: Download Trained Model
+## Step 4: Download Trained Models
 
-The trained model file is required for myotube segmentation.
+Trained model files are required for myotube and injury segmentation.
 
-### 4.1 Download the Model
+### 4.1 Download the Myotube Model
 
 1. **Go to the Google Drive link**:
    - Open your web browser
@@ -177,7 +177,23 @@ The trained model file is required for myotube segmentation.
    - Move the downloaded `.pth` file to this folder
    - **Remember this location** - you'll need it when running segmentation
 
-**Note**: The model file is large (several hundred MB), so the download may take a few minutes.
+### 4.2 Download the Injury Model
+
+1. **Go to the Google Drive link**:
+   - Open your web browser
+   - Go to: **https://drive.google.com/file/d/1_x1AocF88YL0F1FXqI9CguH1A4wDYBRU/view?usp=drive_link**
+
+2. **Download the .pth file**:
+   - Click the **"Download"** button
+   - If prompted, click **"Download anyway"**
+   - The file will be named `model_best.pth`
+
+3. **Move the model file**:
+   - Move it to the same models folder: `C:\Users\YourUsername\Mask2Former\models`
+   - Or place it in `C:\Users\YourUsername\Mask2Former\output_injury\`
+   - **Remember this location** - you'll need it when running injury segmentation
+
+**Note**: Both model files are large (several hundred MB each), so downloads may take a few minutes.
 
 ---
 
@@ -236,7 +252,8 @@ C:\Program Files\Fiji\macros\
 │       ├── max_projection_tab.py
 │       ├── myotube_tab.py
 │       ├── cellpose_tab.py
-│       └── analysis_tab.py
+│       ├── analysis_tab.py
+│       └── injury_tab.py
 ├── core\                               ← NEW FOLDER
 │   ├── __init__.py
 │   ├── segmentation.py
@@ -276,7 +293,7 @@ C:\Program Files\Fiji\macros\
 
 ## Step 7: Using the Multi-Tab Interface
 
-The GUI has **4 tabs** for different processing steps. You can run them independently or in sequence.
+The GUI has **5 tabs** for different processing steps. You can run them independently or in sequence.
 
 ### Tab 1: Max Projection
 
@@ -471,6 +488,55 @@ The GUI has **4 tabs** for different processing steps. You can run them independ
   - Percentage of myotubes with central nuclei
   - Percentage of myotubes with peripheral nuclei
   - **Per-sample breakdown table** showing individual sample statistics for comparison
+
+---
+
+### Tab 5: Injury Segmentation
+
+**Purpose**: Detect and segment injuries (damage sites) in myotilin channel images using a trained Mask2Former model. Images are automatically preprocessed and split into 4 quadrants for inference, then reassembled.
+
+**Important - Input differs from Myotube Segmentation**:
+- **Myotube Segmentation (Tab 2)**: Expects **preprocessed grey channel images** (already max-projected and contrast-adjusted)
+- **Injury Segmentation (Tab 5)**: Expects **raw myotilin channel TIFF images** (e.g., `*ch02*.tif` or `*ch03*.tif` depending on your experiment). The tab automatically applies max projection (if z-stack) and Above130Sqrt preprocessing internally to match the training data format.
+
+**Steps**:
+1. Click the **"Injury Segmentation"** tab
+2. **Input Directory**: Browse to folder containing **raw myotilin channel images** (TIFF format)
+3. **Output Directory**: Choose where to save injury segmentation results
+4. **Model Configuration** (first time only):
+   - *Config File: Browse to `output_injury\config.yaml` in your Mask2Former folder
+   - *Model Weights: Browse to the `model_best.pth` you downloaded (see [Step 4.2](#42-download-the-injury-model))
+   - *Mask2Former Path: Browse to your Mask2Former project folder
+
+5. **Detection Parameters**:
+   - **Confidence Threshold** (0-1): Default 0.05
+     - Injury model scores are typically low — start with 0.05
+     - Increase to 0.1-0.2 if seeing too many false positives
+   - **Minimum Area** (pixels): Default 30
+     - Injuries can be very small
+   - **Maximum Area** (pixels): Default 50000
+   - **Final Min Area** (pixels): Default 50
+
+6. **Output Options**:
+   - **Use CPU**: Check if you don't have a CUDA GPU
+   - **Save measurements CSV**: Saves area and bounding box for each injury
+
+7. Click **"Run Injury Segmentation"**
+
+**What happens internally**:
+1. Each image is read as raw TIFF (handles z-stacks automatically)
+2. Above130Sqrt preprocessing is applied (same as training data)
+3. The preprocessed image is split into 4 quadrants (top-left, top-right, bottom-left, bottom-right)
+4. Mask2Former inference runs on each quadrant
+5. Detected injuries are mapped back to original image coordinates
+6. Injuries split across quadrant boundaries are automatically merged
+
+**Output Files** (for each image):
+- `[ImageName]_processed.tif` - The preprocessed image (Above130Sqrt, no overlay)
+- `[ImageName]_injury_overlay.tif` - Color-coded overlay showing detected injuries
+- `[ImageName]_masks/` - Individual injury mask PNG files (one per injury)
+- `[ImageName]_info.json` - Processing metadata
+- `[ImageName]_measurements.csv` - Injury measurements (if enabled)
 
 ---
 
@@ -926,16 +992,21 @@ If you encounter issues not covered in this guide:
 1. **Tab 1**: Max projection → myotube_max_projection/ + nucleus_max_projection/
    - Input: Two separate folders (myotube + nucleus)
 2. **Tab 2**: Segment myotubes → masks + overlays
+   - Input: **Preprocessed grey channel images**
    - Key params: Confidence 0.25, Min area 100, Final min area 1000
 3. **Tab 3**: Segment nuclei → NPY files
    - Key params: Model cyto3, Diameter 30, Target res 3000
 4. **Tab 4**: Analyze → CSV files + overlays
    - Key params: Size 400-6000, Eccentricity 0.95, Overlap 0.10, Periphery 0.95
+5. **Tab 5**: Injury segmentation → masks + overlays
+   - Input: **Raw myotilin channel TIFFs** (preprocessing is automatic)
+   - Key params: Confidence 0.05, Min area 30, Config: output_injury/config.yaml
 
 **Main result files**:
 - **Myotube segmentation**: `*_processed_overlay.tif` (visualization), `*_masks/` (individual masks)
 - **Nuclei segmentation**: `*_seg.npy` (required for analysis), `*_overlay.png` (visualization)
 - **Analysis**: `*_myotube_nuclei_counts.csv` (main results), `*_nuclei_overlay.tif` (all nuclei), `*_periphery_overlay.tif` (central vs peripheral)
+- **Injury segmentation**: `*_processed.tif` (preprocessed image), `*_injury_overlay.tif` (visualization), `*_masks/` (individual masks)
 
 **Overlay color codes**:
 - **nuclei_overlay.tif**: GREEN=assigned, RED=size filter, YELLOW=eccentricity filter, BLUE=overlap filter
@@ -951,19 +1022,29 @@ If you encounter issues not covered in this guide:
 
 ## Version Information
 
-- **Guide Version**: 2.4
-- **Last Updated**: January 2025
+- **Guide Version**: 2.5
+- **Last Updated**: March 2026
 - **Compatible with**: Windows 10/11, Fiji/ImageJ
 - **Features**:
-  - Multi-tab interface with 4 processing steps
+  - Multi-tab interface with 5 processing steps
   - Max projection for separate myotube and nucleus folders
   - Myotube segmentation with Mask2Former
   - Nuclei segmentation with CellPose
   - Comprehensive nuclei-myotube relationship analysis
+  - **Injury segmentation with quadrant-based processing**
   - Central vs peripheral nuclei classification
   - **Enhanced nuclei overlay visualization with grid reference system**
   - **Combined summary across all analyzed samples**
   - Detailed parameter explanations and CSV result documentation
+
+**Changes in v2.5** (March 2026):
+  - **Injury Segmentation Tab** (Tab 5):
+    - New tab for detecting injury regions in myotube images
+    - Automatic quadrant cropping for large images with boundary merging
+    - Built-in Above130Sqrt preprocessing (no need to preprocess images externally)
+    - Accepts raw myotilin TIFF files (different from myotube tab which needs preprocessed grey channel)
+    - Outputs both preprocessed image and injury overlay visualization
+    - Auto-detects config and weights from `output_injury/` directory
 
 **Changes in v2.4** (January 2025):
   - **Central/Peripheral nuclei statistics**:

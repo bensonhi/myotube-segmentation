@@ -181,8 +181,8 @@ class SetCriterion(nn.Module):
         ).squeeze(1)
 
         losses = {
-            "loss_mask": sigmoid_ce_loss_jit(point_logits, point_labels, num_masks),
-            "loss_dice": dice_loss_jit(point_logits, point_labels, num_masks),
+            "loss_mask": sigmoid_ce_loss(point_logits, point_labels, num_masks),
+            "loss_dice": dice_loss(point_logits, point_labels, num_masks),
         }
 
         del src_masks
