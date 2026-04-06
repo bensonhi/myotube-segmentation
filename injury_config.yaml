@@ -41,7 +41,7 @@ DATASETS:
 SOLVER:
   IMS_PER_BATCH: 1  # Swin-Large requires single batch
   BASE_LR: 0.00001  # Optimized learning rate (1e-5)
-  MAX_ITER: 7000    # Model peaks ~5000-6800 iters, overfits after
+  MAX_ITER: 20000    # Model peaks ~5000-6800 iters, overfits after
   WARMUP_FACTOR: 0.1
   WARMUP_ITERS: 250
   WEIGHT_DECAY: 0.01
@@ -59,7 +59,7 @@ SOLVER:
 
 # Input configuration
 INPUT:
-  IMAGE_SIZE: 1280  # Optimized from search (better augmentation diversity)
+  IMAGE_SIZE: 1500  # Optimized from search (better augmentation diversity)
   MIN_SCALE: 0.7
   MAX_SCALE: 1.4
   FORMAT: "RGB"
