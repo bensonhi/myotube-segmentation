@@ -6,6 +6,7 @@ __all__ = [
     'DEFAULT_POST_PROCESSING_CONFIG',
     'DEFAULT_GUI_CONFIG',
     'DEFAULT_INJURY_GUI_CONFIG',
+    'DEFAULT_INJURY_ANALYSIS_GUI_CONFIG',
     'IMAGE_EXTENSIONS',
     'STATUS_SUCCESS',
     'STATUS_ERROR',
@@ -61,6 +62,17 @@ DEFAULT_INJURY_GUI_CONFIG = {
     'final_min_area': 50,
     'cpu': False,
     'save_measurements': False,
+}
+
+
+# Default GUI configuration for injury-myotube analysis
+DEFAULT_INJURY_ANALYSIS_GUI_CONFIG = {
+    'myotube_folder': '',
+    'injury_folder': '',
+    'original_images_folder': '',
+    'output_folder': '',
+    'min_overlap_ratio': 0.1,
+    'full_image_mode': True,
 }
 
 

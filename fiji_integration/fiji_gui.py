@@ -45,6 +45,7 @@ from fiji_integration.gui.tabs.cellpose_tab import CellPoseTab
 from fiji_integration.gui.tabs.analysis_tab import AnalysisTab
 from fiji_integration.gui.tabs.max_projection_tab import MaxProjectionTab
 from fiji_integration.gui.tabs.injury_tab import InjuryTab
+from fiji_integration.gui.tabs.injury_analysis_tab import InjuryAnalysisTab
 
 
 def main():
@@ -56,6 +57,7 @@ def main():
         CellPoseTab(),
         AnalysisTab(),
         InjuryTab(),
+        InjuryAnalysisTab(),
     ]
 
     # Create and show main window

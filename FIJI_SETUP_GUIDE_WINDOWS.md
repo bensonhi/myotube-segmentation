@@ -253,7 +253,8 @@ C:\Program Files\Fiji\macros\
 │       ├── myotube_tab.py
 │       ├── cellpose_tab.py
 │       ├── analysis_tab.py
-│       └── injury_tab.py
+│       ├── injury_tab.py
+│       └── injury_analysis_tab.py
 ├── core\                               ← NEW FOLDER
 │   ├── __init__.py
 │   ├── segmentation.py
@@ -293,7 +294,7 @@ C:\Program Files\Fiji\macros\
 
 ## Step 7: Using the Multi-Tab Interface
 
-The GUI has **5 tabs** for different processing steps. You can run them independently or in sequence.
+The GUI has **6 tabs** for different processing steps. You can run them independently or in sequence.
 
 ### Tab 1: Max Projection
 
@@ -540,6 +541,69 @@ The GUI has **5 tabs** for different processing steps. You can run them independ
 
 ---
 
+### Tab 6: Injury-Myotube Analysis
+
+**Purpose**: Pair injury segmentation results (from Tab 5) with myotube segmentation results (from Tab 2) to compute injury metrics per myotube and extract raw pixel intensity from each lesion.
+
+**When to use**: After running both Myotube Segmentation (Tab 2) and Injury Segmentation (Tab 5) on the same set of images.
+
+**What it computes**:
+1. **Injury percentage per myotube** — total injury area divided by myotube area (area ratio)
+2. **Raw pixel intensity within each lesion** — mean, median, max, min, standard deviation, coefficient of variation (CV), and 25th/75th percentiles extracted from the original raw TIFF (12/16-bit)
+
+The **coefficient of variation (CV = std/mean)** is especially useful: a low CV means the lesion has uniform brightness ("spread out"), while a high CV means it has concentrated bright spots ("short but intense").
+
+**Steps**:
+1. Click the **"Injury-Myotube Analysis"** tab
+
+2. **Input/Output Folders**:
+   - **Myotube Results Folder**: Browse to myotube segmentation results (from Tab 2)
+   - **Injury Results Folder**: Browse to injury segmentation results (from Tab 5)
+   - **Original Images Folder**: Browse to the folder with your **raw myotilin channel TIFFs** (the same images used as input for Tab 5). These are needed for extracting true fluorescence intensity values.
+   - **Output Folder**: Choose where to save analysis results
+
+3. **Analysis Parameters**:
+   - **Min Overlap Ratio** (0-1): Default 0.10 (10%)
+     - Minimum fraction of an injury mask that must overlap with a myotube to be assigned to it
+     - Injuries below this threshold are reported as "unassigned"
+     - *When to adjust*: Lower if injuries tend to sit at myotube edges; raise if you want only clearly interior injuries
+
+4. **Processing Options**:
+   - **Full Image Mode**: Check if processing complete images (not cropped quadrants)
+
+5. Click **"Run Analysis"**
+
+**How sample matching works**: The analyzer matches samples by folder name. For example, if you have `2_myotube_segmentation/SampleA/` and `5_injury_segmentation/SampleA/`, they will be paired automatically because both folders are named `SampleA`.
+
+**Output Files** (for each sample):
+
+- `{Sample}_injury_analysis.csv` — **Per-injury metrics**: one row per detected injury
+  - `injury_id`, `injury_area_px`, `assigned_myotube_id`, `myotube_area_px`
+  - `injury_area_ratio` (injury area / myotube area)
+  - `overlap_pixels`, `overlap_ratio`, `assignment_status`
+  - `mean_intensity`, `median_intensity`, `max_intensity`, `min_intensity`
+  - `std_intensity`, `cv_intensity` (coefficient of variation)
+  - `p25_intensity`, `p75_intensity` (25th and 75th percentiles)
+
+- `{Sample}_myotube_injury_summary.csv` — **Per-myotube metrics**: one row per myotube
+  - `myotube_id`, `myotube_area_px`, `num_injuries`, `total_injury_area_px`
+  - `injury_percentage` (total injury area / myotube area × 100)
+  - `mean_injury_intensity`, `has_injuries`
+
+- `{Sample}_injury_myotube_overlay.tif` — **Visualization overlay**
+  - **CYAN contours**: Myotube boundaries (labeled M1, M2, ...)
+  - **MAGENTA fill**: Injuries assigned to a myotube (labeled I1, I2, ...)
+  - **RED fill**: Unassigned injuries (not inside any myotube)
+
+- `{Sample}_injury_myotube_summary.txt` — Text summary with counts, area ratios, and intensity stats
+
+**Combined output** (across all samples):
+- `combined_injury_analysis.csv` — All per-injury rows from every sample
+- `combined_myotube_injury_summary.csv` — All per-myotube rows from every sample
+- `combined_injury_myotube_summary.txt` — Aggregate statistics with per-sample breakdown table
+
+---
+
 ## Step 8: Complete Workflow Example
 
 Here's a typical workflow from raw images to final analysis:
@@ -571,10 +635,24 @@ Here's a typical workflow from raw images to final analysis:
    - Filter Settings: Use defaults (400-6000 pixels, 0.95 eccentricity, 0.10 overlap, 0.95 periphery)
    - Result: CSV files and overlays showing nuclei-myotube relationships
 
+5. **Tab 5: Segment Injuries** (if studying myotube damage)
+   - Input: `C:\MyImages\1_max_projection\myotube_channel\` (raw myotilin TIFFs)
+   - Output: `C:\MyImages\5_injuries\`
+   - Result: Injury masks and overlays
+
+6. **Tab 6: Injury-Myotube Analysis** (after running Tabs 2 and 5)
+   - Myotube Folder: `C:\MyImages\2_myotubes\`
+   - Injury Folder: `C:\MyImages\5_injuries\`
+   - Original Images: `C:\MyImages\1_max_projection\myotube_channel\`
+   - Output: `C:\MyImages\6_injury_analysis\`
+   - Result: Per-injury area ratios, intensity metrics, and overlays
+
 **Final Output**:
 - `myotube_nuclei_counts.csv` - Ready for statistical analysis!
 - `nuclei_overlay.tif` - Verify filtering worked correctly
 - `periphery_overlay.tif` - See central vs peripheral nuclei distribution
+- `injury_analysis.csv` - Per-injury metrics with intensity data
+- `myotube_injury_summary.csv` - Injury percentage per myotube
 
 ---
 
@@ -615,6 +693,22 @@ OutputFolder/
     ├── SampleName_nuclei_overlay.tif               ← All nuclei color-coded
     └── SampleName_periphery_overlay.tif            ← Only assigned nuclei (central vs peripheral)
 ```
+
+### Injury-Myotube Analysis Output
+
+```
+OutputFolder/
+├── combined_injury_analysis.csv                       ← All injuries across all samples
+├── combined_myotube_injury_summary.csv                ← All myotubes across all samples
+├── combined_injury_myotube_summary.txt                ← Aggregate statistics
+└── SampleName/
+    ├── SampleName_injury_analysis.csv                 ← Per-injury metrics (area ratio + intensity)
+    ├── SampleName_myotube_injury_summary.csv          ← Per-myotube injury summary
+    ├── SampleName_injury_myotube_overlay.tif          ← Visualization overlay
+    └── SampleName_injury_myotube_summary.txt          ← Text summary
+```
+
+---
 
 **Understanding the CSV Files**:
 
@@ -703,6 +797,59 @@ Generated after all samples are analyzed. Provides:
   - Average central/peripheral nuclei per myotube
 - **Per-sample breakdown table**: Compare statistics across all analyzed samples side-by-side
 
+#### 5. `injury_analysis.csv` - **PER-INJURY METRICS**
+
+One row per detected injury. This is your primary file for injury characterization.
+
+**Columns**:
+- `injury_id`: Unique ID for each injury (1, 2, 3, ...)
+- `injury_area_px`: Area of the injury in pixels
+- `assigned_myotube_id`: Which myotube this injury is inside (None if unassigned)
+- `myotube_area_px`: Area of the assigned myotube
+- `injury_area_ratio`: **Injury area / myotube area** (your baseline metric)
+- `overlap_pixels`, `overlap_ratio`: How much of the injury overlaps with the myotube
+- `assignment_status`: "assigned", "unassigned", or "below_threshold"
+- `mean_intensity`: **Average raw pixel intensity** within the lesion (from original 12/16-bit TIFF)
+- `median_intensity`: Median intensity (less sensitive to outliers)
+- `max_intensity`: Peak intensity in the lesion
+- `min_intensity`: Minimum intensity in the lesion
+- `std_intensity`: Standard deviation of intensity
+- `cv_intensity`: **Coefficient of variation** (std/mean) — key metric for lesion characterization:
+  - **Low CV (~0.2-0.4)**: Uniform, spread-out lesion
+  - **High CV (~0.6-1.0+)**: Concentrated, intense lesion
+- `p25_intensity`, `p75_intensity`: 25th and 75th percentile intensity values
+
+**Example rows**:
+```
+injury_id,injury_area_px,assigned_myotube_id,myotube_area_px,injury_area_ratio,mean_intensity,cv_intensity
+1,2340,3,125000,0.0187,847.3,0.42
+2,890,3,125000,0.0071,1523.6,0.78
+3,1560,None,0,0.0,612.4,0.35
+```
+- Injury 1: Inside myotube 3, covers 1.87% of the myotube, moderate uniform intensity (CV=0.42)
+- Injury 2: Also in myotube 3, smaller but much brighter and more concentrated (CV=0.78)
+- Injury 3: Not inside any myotube (unassigned)
+
+#### 6. `myotube_injury_summary.csv` - **PER-MYOTUBE INJURY SUMMARY**
+
+One row per myotube. Use this to see which myotubes are most damaged.
+
+**Columns**:
+- `myotube_id`: Unique ID matching Tab 2 output
+- `myotube_area_px`: Myotube area in pixels
+- `num_injuries`: Number of injuries assigned to this myotube
+- `total_injury_area_px`: Sum of all injury areas in this myotube
+- `injury_percentage`: **Total injury area / myotube area × 100** (percentage of myotube that is injured)
+- `mean_injury_intensity`: Average of the mean intensities across all injuries in this myotube
+- `has_injuries`: True/False flag
+
+**Example row**:
+```
+myotube_id,myotube_area_px,num_injuries,total_injury_area_px,injury_percentage,mean_injury_intensity,has_injuries
+3,125000,2,3230,2.58,1185.5,True
+```
+This means: Myotube #3 has **2 injuries** covering **2.58%** of its total area, with average injury intensity of 1185.5.
+
 ---
 
 **Understanding the Overlay Visualizations**:
@@ -759,6 +906,21 @@ This overlay shows spatial distribution of nuclei within myotubes:
 **How to use this**:
 - If you want to analyze central vs peripheral nuclei separately, you can use the `overlap_percentage` column in the CSV along with your threshold values
 - Example: Count nuclei with overlap_percentage ≥ 95 (central) vs 10-95 (peripheral)
+
+---
+
+#### `injury_myotube_overlay.tif` - Shows injuries within myotube context
+
+This overlay shows the spatial relationship between injuries and myotubes:
+
+- **CYAN contours** with labels (M1, M2, ...): Myotube boundaries
+- **MAGENTA filled regions** with labels (I1, I2, ...): Injuries assigned to a myotube
+- **RED filled regions**: Unassigned injuries (not inside any myotube)
+
+**How to use this**:
+1. Verify that injuries are correctly assigned to the right myotubes
+2. Check if any injuries are marked unassigned (red) when they should be inside a myotube — you may need to lower the min overlap ratio
+3. Cross-reference injury IDs (I1, I2, ...) with the `injury_analysis.csv` to see their metrics
 
 ---
 
@@ -1001,16 +1163,21 @@ If you encounter issues not covered in this guide:
 5. **Tab 5**: Injury segmentation → masks + overlays
    - Input: **Raw myotilin channel TIFFs** (preprocessing is automatic)
    - Key params: Confidence 0.05, Min area 30, Config: output_injury/config.yaml
+6. **Tab 6**: Injury-Myotube Analysis → area ratios + intensity CSVs
+   - Input: Myotube results (Tab 2) + Injury results (Tab 5) + Original raw TIFFs
+   - Key params: Min overlap 0.10
 
 **Main result files**:
 - **Myotube segmentation**: `*_processed_overlay.tif` (visualization), `*_masks/` (individual masks)
 - **Nuclei segmentation**: `*_seg.npy` (required for analysis), `*_overlay.png` (visualization)
-- **Analysis**: `*_myotube_nuclei_counts.csv` (main results), `*_nuclei_overlay.tif` (all nuclei), `*_periphery_overlay.tif` (central vs peripheral)
+- **Nuclei-myotube analysis**: `*_myotube_nuclei_counts.csv` (main results), `*_nuclei_overlay.tif` (all nuclei), `*_periphery_overlay.tif` (central vs peripheral)
 - **Injury segmentation**: `*_processed.tif` (preprocessed image), `*_injury_overlay.tif` (visualization), `*_masks/` (individual masks)
+- **Injury-myotube analysis**: `*_injury_analysis.csv` (per-injury metrics + intensity), `*_myotube_injury_summary.csv` (per-myotube injury %), `*_injury_myotube_overlay.tif` (visualization)
 
 **Overlay color codes**:
 - **nuclei_overlay.tif**: GREEN=assigned, RED=size filter, YELLOW=eccentricity filter, BLUE=overlap filter
 - **periphery_overlay.tif**: GREEN=central nuclei (≥95% overlap), YELLOW=peripheral nuclei (10-95% overlap)
+- **injury_myotube_overlay.tif**: CYAN=myotube contours, MAGENTA=assigned injuries, RED=unassigned injuries
 
 **After updates**:
 1. Copy entire `fiji_integration/` contents (both .ijm files + gui/ + core/ + utils/ folders)
@@ -1022,20 +1189,32 @@ If you encounter issues not covered in this guide:
 
 ## Version Information
 
-- **Guide Version**: 2.5
-- **Last Updated**: March 2026
+- **Guide Version**: 2.6
+- **Last Updated**: April 2026
 - **Compatible with**: Windows 10/11, Fiji/ImageJ
 - **Features**:
-  - Multi-tab interface with 5 processing steps
+  - Multi-tab interface with 6 processing steps
   - Max projection for separate myotube and nucleus folders
   - Myotube segmentation with Mask2Former
   - Nuclei segmentation with CellPose
   - Comprehensive nuclei-myotube relationship analysis
-  - **Injury segmentation with quadrant-based processing**
+  - Injury segmentation with quadrant-based processing
+  - **Injury-myotube analysis with area ratios and raw intensity extraction**
   - Central vs peripheral nuclei classification
-  - **Enhanced nuclei overlay visualization with grid reference system**
-  - **Combined summary across all analyzed samples**
+  - Enhanced nuclei overlay visualization with grid reference system
+  - Combined summary across all analyzed samples
   - Detailed parameter explanations and CSV result documentation
+
+**Changes in v2.6** (April 2026):
+  - **Injury-Myotube Analysis Tab** (Tab 6):
+    - New tab for pairing injury and myotube segmentation results
+    - Computes injury percentage per myotube (injury area / myotube area)
+    - Extracts raw pixel intensity from original 12/16-bit TIFFs (mean, median, max, min, std)
+    - Coefficient of variation (CV) metric to distinguish spread-out vs concentrated lesions
+    - Intensity percentiles (P25, P75) for distribution characterization
+    - Unassigned injury tracking for injuries not inside any myotube
+    - Per-sample and combined CSVs with overlay visualizations
+    - Automatic sample matching between myotube and injury output folders
 
 **Changes in v2.5** (March 2026):
   - **Injury Segmentation Tab** (Tab 5):
