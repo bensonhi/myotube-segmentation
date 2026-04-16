@@ -55,11 +55,20 @@ class InjuryMyotubeAnalyzer:
 
     def load_masks(self, folder: Path, prefix: str) -> Dict[int, np.ndarray]:
         """Load individual mask PNGs from a *_masks/ subdirectory."""
-        masks_dir = folder / f"{folder.name}_masks"
         result: Dict[int, np.ndarray] = {}
 
+        # Try exact name match first, then find any *_masks dir with matching files
+        masks_dir = folder / f"{folder.name}_masks"
         if not masks_dir.exists():
-            self.log(f"  Warning: Masks directory not found: {masks_dir}")
+            candidates = [d for d in folder.iterdir()
+                          if d.is_dir() and d.name.endswith("_masks")]
+            for c in candidates:
+                if list(c.glob(f"{prefix}_*_mask.png")):
+                    masks_dir = c
+                    break
+
+        if not masks_dir.exists():
+            self.log(f"  Warning: No *_masks directory found in {folder}")
             return result
 
         pattern = f"{prefix}_*_mask.png"
@@ -124,17 +133,48 @@ class InjuryMyotubeAnalyzer:
     # ------------------------------------------------------------------
 
     def find_matching_myotube_folder(self, injury_folder_name: str) -> Optional[Path]:
-        """Find the myotube output folder that matches an injury sample."""
-        # Direct name match
-        candidate = self.myotube_dir / injury_folder_name
-        if candidate.exists() and (candidate / f"{injury_folder_name}_info.json").exists():
-            return candidate
+        """Find the myotube output folder that matches an injury sample.
 
-        # Search all info.json files for a matching input_image stem
-        for info_file in self.myotube_dir.rglob("*_info.json"):
-            folder = info_file.parent
-            if folder.name == injury_folder_name:
-                return folder
+        Handles common naming differences:
+        - Exact match
+        - MAX_ prefix (from max projection tab)
+        - Myotube folder is flat (myotube_dir itself is the sample)
+        """
+        # Build list of name variants to try
+        name_variants = [injury_folder_name]
+        # Myotube images often go through max projection, adding MAX_ prefix
+        name_variants.append(f"MAX_{injury_folder_name}")
+        # Or the injury name might have MAX_ and the myotube doesn't
+        if injury_folder_name.startswith("MAX_"):
+            name_variants.append(injury_folder_name[4:])
+
+        # Check if myotube_dir itself is a flat sample folder
+        if self._is_sample_folder(self.myotube_dir, "Myotube"):
+            self.log(f"  Myotube folder is itself a sample (flat structure)")
+            return self.myotube_dir
+
+        # Try each name variant as a subfolder
+        for variant in name_variants:
+            candidate = self.myotube_dir / variant
+            if candidate.exists() and candidate.is_dir():
+                if self._is_sample_folder(candidate, "Myotube"):
+                    return candidate
+
+        # Search all subfolders for any that contain myotube masks
+        for item in self.myotube_dir.iterdir():
+            if not item.is_dir() or item.name.startswith('.'):
+                continue
+            # Check if this folder's name matches any variant (case-insensitive)
+            for variant in name_variants:
+                if item.name.lower() == variant.lower():
+                    if self._is_sample_folder(item, "Myotube"):
+                        return item
+            # Check if the folder name contains the injury name as substring
+            for variant in name_variants:
+                if variant.lower() in item.name.lower() or item.name.lower() in variant.lower():
+                    if self._is_sample_folder(item, "Myotube"):
+                        self.log(f"  Matched myotube folder by partial name: {item.name}")
+                        return item
 
         return None
 
@@ -346,19 +386,26 @@ class InjuryMyotubeAnalyzer:
         sample_name = injury_folder.name
         self.log(f"\nAnalyzing: {sample_name}")
 
-        # Load injury info
+        # Load injury info (optional — we can proceed with just masks)
         injury_info_file = injury_folder / f"{sample_name}_info.json"
-        if not injury_info_file.exists():
-            self.log(f"  Skipped: no injury _info.json in {injury_folder}")
-            return False
-
-        with open(injury_info_file, 'r') as f:
-            injury_info = json.load(f)
-
-        num_injuries = injury_info.get('num_injuries', 0)
-        if num_injuries == 0:
-            self.log(f"  Skipped: 0 injuries detected")
-            return False
+        if injury_info_file.exists():
+            with open(injury_info_file, 'r') as f:
+                injury_info = json.load(f)
+            num_injuries = injury_info.get('num_injuries', 0)
+            if num_injuries == 0:
+                self.log(f"  Skipped: _info.json reports 0 injuries")
+                return False
+        else:
+            # Also try any *_info.json in the folder
+            info_files = list(injury_folder.glob("*_info.json"))
+            if info_files:
+                with open(info_files[0], 'r') as f:
+                    injury_info = json.load(f)
+                if injury_info.get('num_injuries', 0) == 0:
+                    self.log(f"  Skipped: _info.json reports 0 injuries")
+                    return False
+            else:
+                self.log(f"  Note: no _info.json found, proceeding with mask files only")
 
         # Load injury masks
         injury_masks = self.load_masks(injury_folder, "Injury")
@@ -619,15 +666,34 @@ class InjuryMyotubeAnalyzer:
     # Entry point
     # ------------------------------------------------------------------
 
+    def _is_sample_folder(self, folder: Path, prefix: str) -> bool:
+        """Check if a folder directly contains segmentation results."""
+        # Has *_info.json?
+        if list(folder.glob("*_info.json")):
+            return True
+        # Has *_masks/ with expected mask files?
+        for d in folder.iterdir():
+            if d.is_dir() and d.name.endswith("_masks"):
+                if list(d.glob(f"{prefix}_*_mask.png")):
+                    return True
+        return False
+
     def analyze_all_samples(self):
         """Iterate over injury output folders and analyze each sample."""
         injury_folders = []
-        for info_file in sorted(self.injury_dir.rglob("*_info.json")):
-            folder = info_file.parent
-            if not folder.name.startswith('.') and folder != self.injury_dir:
-                injury_folders.append(folder)
 
-        # Deduplicate (same folder could match multiple info files)
+        # Check if the selected folder itself IS a sample (flat structure)
+        if self._is_sample_folder(self.injury_dir, "Injury"):
+            self.log(f"Detected flat structure: selected folder is itself a sample")
+            injury_folders.append(self.injury_dir)
+        else:
+            # Standard structure: look for subfolders that are samples
+            for item in sorted(self.injury_dir.iterdir()):
+                if item.is_dir() and not item.name.startswith('.'):
+                    if self._is_sample_folder(item, "Injury"):
+                        injury_folders.append(item)
+
+        # Deduplicate
         seen = set()
         unique_folders = []
         for f in injury_folders:
@@ -636,7 +702,28 @@ class InjuryMyotubeAnalyzer:
                 unique_folders.append(f)
         injury_folders = unique_folders
 
+        # Diagnostic logging when nothing found
+        if not injury_folders:
+            self.log(f"WARNING: Found 0 injury samples in: {self.injury_dir}")
+            self.log(f"  Directory contents:")
+            try:
+                for item in sorted(self.injury_dir.iterdir()):
+                    item_type = "DIR " if item.is_dir() else "FILE"
+                    self.log(f"    [{item_type}] {item.name}")
+            except Exception as e:
+                self.log(f"  Could not list directory: {e}")
+            self.log(f"")
+            self.log(f"  Accepted structures:")
+            self.log(f"    A) Standard (multiple samples):")
+            self.log(f"       SelectedFolder/Sample1/{'{'}Sample1_info.json, Sample1_masks/{'}'}")
+            self.log(f"       SelectedFolder/Sample2/...")
+            self.log(f"    B) Flat (single sample):")
+            self.log(f"       SelectedFolder/{'{'}*_info.json, *_masks/Injury_*_mask.png{'}'}")
+
         self.log(f"Found {len(injury_folders)} injury sample(s) to analyze")
+        if injury_folders:
+            for f in injury_folders:
+                self.log(f"  - {f.name}")
         self.log(f"Myotube results in: {self.myotube_dir}")
         self.log(f"Original images in: {self.original_images_dir}")
         self.log(f"Min overlap ratio:  {self.min_overlap_ratio:.0%}")
